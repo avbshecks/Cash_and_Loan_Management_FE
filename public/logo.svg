@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Background -->
+  <rect width="200" height="200" rx="24" fill="#0f172a"/>
+
+  <!-- Gold pyramid rays -->
+  <polygon points="100,30 20,160 40,160"  fill="#d97706" opacity="0.7"/>
+  <polygon points="100,30 35,160 60,160"  fill="#f59e0b" opacity="0.85"/>
+  <polygon points="100,30 55,160 85,160"  fill="#fbbf24"/>
+  <polygon points="100,30 80,160 120,160" fill="#f59e0b"/>
+  <polygon points="100,30 115,160 145,160" fill="#fbbf24"/>
+  <polygon points="100,30 140,160 165,160" fill="#f59e0b" opacity="0.85"/>
+  <polygon points="100,30 160,160 180,160" fill="#d97706" opacity="0.7"/>
+
+  <!-- Shovel silhouette (left) -->
+  <g transform="translate(22,18) rotate(-30,24,24)" fill="#1e293b">
+    <ellipse cx="24" cy="18" rx="10" ry="12"/>
+    <rect x="22" y="28" width="4" height="28" rx="2"/>
+  </g>
+
+  <!-- Pickaxe silhouette (right) -->
+  <g transform="translate(148,10) rotate(25,28,20)" fill="#1e293b">
+    <rect x="0" y="16" width="56" height="7" rx="3.5"/>
+    <path d="M0,16 Q-6,4 4,2 Q14,0 16,16Z"/>
+    <path d="M56,16 Q62,10 58,4 Q52,-2 46,16Z"/>
+    <rect x="26" y="22" width="5" height="24" rx="2.5"/>
+  </g>
+
+  <!-- WB text -->
+  <text x="100" y="108" font-family="Arial Black, Arial" font-weight="900" font-size="52"
+        fill="white" text-anchor="middle" stroke="#0f172a" stroke-width="3" paint-order="stroke">WB</text>
+</svg>
