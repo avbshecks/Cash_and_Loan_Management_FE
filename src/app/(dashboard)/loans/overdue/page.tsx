@@ -1,18 +1,36 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, RefreshCw, CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { OverdueLoan } from '@/lib/types';
 import Header from '@/components/Header';
 import Badge, { riskVariant } from '@/components/Badge';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
+import { getStoredUser } from '@/lib/auth';
 
 export default function OverdueLoansPage() {
+  const qc = useQueryClient();
+  const [result, setResult] = useState('');
+  const role = getStoredUser()?.role;
+  const canRun = role === 'Admin' || role === 'Manager';
+
   const { data: loans = [], isLoading } = useQuery<OverdueLoan[]>({
     queryKey: ['overdueLoans'],
     queryFn: () => api.get('/loan/overdue').then(r => r.data),
+  });
+
+  const runCheck = useMutation({
+    mutationFn: () => api.post('/loan/run-overdue-check').then(r => r.data),
+    onSuccess: (data) => {
+      setResult(`Done — ${data.newlyOverdue} newly overdue, ${data.newlyBlacklisted} newly blacklisted. ${data.totalOverdue} overdue total.`);
+      qc.invalidateQueries({ queryKey: ['overdueLoans'] });
+      qc.invalidateQueries({ queryKey: ['blacklisted'] });
+      qc.invalidateQueries({ queryKey: ['loans'] });
+    },
+    onError: (e: any) => setResult(e.response?.data?.message ?? 'Failed to run check.'),
   });
 
   const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -20,6 +38,29 @@ export default function OverdueLoansPage() {
   return (
     <div>
       <Header title="Overdue Loans" subtitle={`${loans.length} loan(s) requiring attention`} />
+
+      {/* Manual check bar (Admin/Manager) */}
+      {canRun && (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <div className="text-sm text-amber-800">
+            Re-evaluate all active loans against their due dates and auto-blacklist 60+ day defaulters.
+          </div>
+          <button
+            onClick={() => { setResult(''); runCheck.mutate(); }}
+            disabled={runCheck.isPending}
+            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition disabled:opacity-60"
+          >
+            <RefreshCw size={15} className={runCheck.isPending ? 'animate-spin' : ''} />
+            {runCheck.isPending ? 'Running…' : 'Run overdue check now'}
+          </button>
+        </div>
+      )}
+
+      {result && (
+        <div className="flex items-center gap-2 mb-4 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm">
+          <CheckCircle size={15} /> {result}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? <LoadingSpinner /> : loans.length === 0 ? (

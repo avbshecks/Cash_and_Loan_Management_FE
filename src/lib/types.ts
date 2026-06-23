@@ -46,7 +46,25 @@ export interface Role {
 // ─── Cash ────────────────────────────────────────────────────────────────────
 export interface CashBalance {
   currentBalance: number;
-  currency: string;
+  currency?: string;
+  pendingDisbursements?: number;
+  initialized?: boolean;
+}
+
+export interface CashLedgerEntry {
+  id: number;
+  date: string;
+  amount: number;
+  type: string;
+  status: string;
+  sourceOrPurpose: string;
+  reference: string;
+  rejectionReason?: string | null;
+  isReversed: boolean;
+  isReversal: boolean;
+  createdBy: string;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
 }
 
 export interface AddCashRequest {
