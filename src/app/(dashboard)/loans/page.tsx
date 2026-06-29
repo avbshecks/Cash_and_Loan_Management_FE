@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { FileText, Plus, X, Loader2, Search, CheckCircle, DollarSign } from 'lucide-react';
+import { FileText, Plus, X, Loader2, Search, CheckCircle, DollarSign, Sun } from 'lucide-react';
 import api from '@/lib/api';
 import { Loan, CreateLoanRequest, CaptureRepaymentRequest, Borrower } from '@/lib/types';
 import Header from '@/components/Header';
@@ -16,6 +16,7 @@ export default function LoansPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [showDayLoan, setShowDayLoan] = useState(false);
   const [showQuickRepay, setShowQuickRepay] = useState(false);
   const [repayLoan, setRepayLoan] = useState<Loan | null>(null);
 
@@ -53,6 +54,12 @@ export default function LoansPage() {
             className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition"
           >
             <DollarSign size={16} /> Quick Repayment
+          </button>
+          <button
+            onClick={() => setShowDayLoan(true)}
+            className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition"
+          >
+            <Sun size={16} /> Day Loan
           </button>
           <button
             onClick={() => setShowCreate(true)}
@@ -125,9 +132,92 @@ export default function LoansPage() {
       </div>
 
       {showCreate && <CreateLoanModal onClose={() => setShowCreate(false)} qc={qc} />}
+      {showDayLoan && <DayLoanModal onClose={() => setShowDayLoan(false)} qc={qc} />}
       {repayLoan && <RepaymentModal loan={repayLoan} onClose={() => setRepayLoan(null)} qc={qc} />}
       {showQuickRepay && <QuickRepaymentModal loans={repayableLoans} onClose={() => setShowQuickRepay(false)} qc={qc} />}
     </div>
+  );
+}
+
+// ─── Day Loan Modal (borrow now, repay this evening) ──────────────────────────
+function DayLoanModal({ onClose, qc }: { onClose: () => void; qc: any }) {
+  const { register, handleSubmit } = useForm<{ amount: number; notes: string }>();
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState('');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Borrower | null>(null);
+  const [showList, setShowList] = useState(false);
+
+  const { data: allBorrowers = [] } = useQuery<Borrower[]>({
+    queryKey: ['borrowers'],
+    queryFn: () => api.get('/loan/borrowers').then(r => r.data),
+  });
+  const eligible = allBorrowers.filter(b => !b.isBlacklisted);
+  const filtered = search.trim()
+    ? eligible.filter(b => b.fullName.toLowerCase().includes(search.toLowerCase()) || b.nationalId.toLowerCase().includes(search.toLowerCase()))
+    : eligible;
+
+  const mut = useMutation({
+    mutationFn: (amount: number) => api.post('/loan/day-loan', { borrowerId: selected!.id, amount }),
+    onSuccess: (res) => { setOk(`${res.data.message} Ref: ${res.data.referenceNumber}`); qc.invalidateQueries({ queryKey: ['loans'] }); qc.invalidateQueries({ queryKey: ['balance'] }); },
+    onError: (e: any) => setErr(e.response?.data?.message ?? 'Failed'),
+  });
+
+  return (
+    <Modal title="New Day Loan" onClose={onClose}>
+      {ok ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm"><CheckCircle size={15} /> {ok}</div>
+          <button onClick={onClose} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg text-sm transition">Close</button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-xs text-blue-800">
+            Same-day loan — disbursed immediately and due by this evening. Repay via the borrower's loan when they return.
+          </div>
+          {err && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{err}</div>}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Borrower</label>
+            {selected ? (
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-300 rounded-lg px-3.5 py-2.5">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{selected.fullName}</p>
+                  <p className="text-xs text-slate-500">{selected.nationalId} · {selected.phone}</p>
+                </div>
+                <button type="button" onClick={() => { setSelected(null); setSearch(''); }} className="text-slate-400 hover:text-red-500 ml-3 text-xs">✕ Change</button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input value={search} onChange={e => { setSearch(e.target.value); setShowList(true); }}
+                  onFocus={() => setShowList(true)} onBlur={() => setTimeout(() => setShowList(false), 150)}
+                  placeholder="Search by name or National ID…"
+                  className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+                {showList && filtered.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                    {filtered.slice(0, 20).map(b => (
+                      <button key={b.id} type="button" onMouseDown={() => { setSelected(b); setShowList(false); setSearch(''); }}
+                        className="w-full text-left px-4 py-3 hover:bg-amber-50 border-b border-slate-50 last:border-0 transition">
+                        <p className="text-sm font-medium text-slate-800">{b.fullName}</p>
+                        <p className="text-xs text-slate-400">{b.nationalId} · {b.employmentStatus}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={handleSubmit(d => { setErr(''); if (!selected) { setErr('Please select a borrower.'); return; } mut.mutate(Number(d.amount)); })} className="space-y-4">
+            <MField label="Amount (USD)" type="number" step="0.01" {...register('amount', { required: true })} />
+            <button type="submit" disabled={mut.isPending || !selected}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg text-sm transition flex items-center justify-center gap-2 disabled:opacity-60">
+              {mut.isPending ? <><Loader2 size={15} className="animate-spin" /> Issuing…</> : <><Sun size={15} /> Issue Day Loan</>}
+            </button>
+          </form>
+        </div>
+      )}
+    </Modal>
   );
 }
 

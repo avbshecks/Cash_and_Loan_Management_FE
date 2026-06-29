@@ -5,17 +5,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import {
   ClipboardCheck, DollarSign, FileText, CheckCircle2,
-  XCircle, Loader2, X, AlertTriangle, Zap
+  XCircle, Loader2, X, AlertTriangle, Zap, PiggyBank
 } from 'lucide-react';
 import api from '@/lib/api';
-import { PendingCashDisbursement, PendingLoan } from '@/lib/types';
+import { PendingCashDisbursement, PendingLoan, PendingSafekeepingWithdrawal } from '@/lib/types';
 import Header from '@/components/Header';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
-type Tab = 'cash' | 'loan-approval' | 'loan-disburse';
+type Tab = 'cash' | 'loan-approval' | 'loan-disburse' | 'safekeeping';
 
 export default function PendingApprovalsPage() {
   const qc = useQueryClient();
@@ -33,13 +33,20 @@ export default function PendingApprovalsPage() {
     refetchInterval: 30_000,
   });
 
+  const { data: skPending = [], isLoading: loadSk } = useQuery<PendingSafekeepingWithdrawal[]>({
+    queryKey: ['safekeepingPending'],
+    queryFn: () => api.get('/safekeeping/pending').then(r => r.data),
+    refetchInterval: 30_000,
+  });
+
   const tabs = [
     { key: 'cash' as Tab,         label: 'Cash Disbursements',  icon: <DollarSign size={14} />,  count: cashPending.length },
     { key: 'loan-approval' as Tab, label: 'Loan Approvals',      icon: <FileText size={14} />,    count: loanPending?.pendingApproval.length ?? 0 },
     { key: 'loan-disburse' as Tab, label: 'Loan Disbursements',  icon: <Zap size={14} />,          count: loanPending?.pendingDisbursement.length ?? 0 },
+    { key: 'safekeeping' as Tab,  label: 'Safekeeping Withdrawals', icon: <PiggyBank size={14} />, count: skPending.length },
   ];
 
-  const total = cashPending.length + (loanPending?.pendingApproval.length ?? 0) + (loanPending?.pendingDisbursement.length ?? 0);
+  const total = cashPending.length + (loanPending?.pendingApproval.length ?? 0) + (loanPending?.pendingDisbursement.length ?? 0) + skPending.length;
 
   return (
     <div>
@@ -69,6 +76,61 @@ export default function PendingApprovalsPage() {
       {tab === 'cash'         && <CashDisbursementsTab data={cashPending}                           isLoading={loadCash}  qc={qc} />}
       {tab === 'loan-approval'&& <LoanApprovalsTab      data={loanPending?.pendingApproval ?? []}   isLoading={loadLoan}  qc={qc} />}
       {tab === 'loan-disburse'&& <LoanDisbursementsTab  data={loanPending?.pendingDisbursement ?? []} isLoading={loadLoan} qc={qc} />}
+      {tab === 'safekeeping'  && <SafekeepingWithdrawalsTab data={skPending}                        isLoading={loadSk}    qc={qc} />}
+    </div>
+  );
+}
+
+// ─── Safekeeping Withdrawals Tab ──────────────────────────────────────────────
+function SafekeepingWithdrawalsTab({ data, isLoading, qc }: { data: PendingSafekeepingWithdrawal[]; isLoading: boolean; qc: any }) {
+  const [rejectTarget, setRejectTarget] = useState<number | null>(null);
+
+  const approve = useMutation({
+    mutationFn: (id: number) => api.post(`/safekeeping/withdrawals/${id}/approve`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['safekeepingPending'] }); qc.invalidateQueries({ queryKey: ['safekeeping'] }); qc.invalidateQueries({ queryKey: ['pendingCount'] }); },
+  });
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {isLoading ? <LoadingSpinner /> : data.length === 0 ? (
+        <EmptyState icon={CheckCircle2} title="No pending safekeeping withdrawals" sub="All collections have been reviewed" />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>{['Date','Depositor','Amount','Reference','Requested By','Actions'].map(h => (
+                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.map(w => (
+                <tr key={w.id} className="hover:bg-amber-50 transition">
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{new Date(w.date).toLocaleString()}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800">{w.depositorName}</td>
+                  <td className="px-4 py-3 font-bold text-red-600">{usd(w.amount)}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{w.reference}</td>
+                  <td className="px-4 py-3 text-slate-600 text-xs">{w.requestedBy}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button onClick={() => approve.mutate(w.id)} disabled={approve.isPending}
+                        className="flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition disabled:opacity-50">
+                        {approve.isPending ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Approve
+                      </button>
+                      <button onClick={() => setRejectTarget(w.id)}
+                        className="flex items-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
+                        <XCircle size={12} /> Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rejectTarget && <RejectModal title="Reject Safekeeping Withdrawal"
+        onReject={async (reason) => { await api.post(`/safekeeping/withdrawals/${rejectTarget}/reject`, reason, { headers: { 'Content-Type': 'application/json' } }); qc.invalidateQueries({ queryKey: ['safekeepingPending'] }); qc.invalidateQueries({ queryKey: ['pendingCount'] }); }}
+        onClose={() => setRejectTarget(null)} />}
     </div>
   );
 }

@@ -201,6 +201,63 @@ export interface UpdateBorrowerRequest {
   guarantorDetails?: string;
 }
 
+// ─── Safekeeping ─────────────────────────────────────────────────────────────
+export interface SafekeepingAccountSummary {
+  id: number;
+  depositorName: string;
+  phone: string;
+  nationalId?: string;
+  isActive: boolean;
+  createdAt: string;
+  balance: number;
+  totalDeposited: number;
+  totalCollected: number;
+  lastActivity?: string | null;
+}
+
+export interface SafekeepingStatementEntry {
+  id: number;
+  date: string;
+  type: string;
+  status: string;
+  amount: number;
+  reference: string;
+  notes?: string | null;
+  rejectionReason?: string | null;
+  balanceAfter: number;
+  capturedBy: string;
+}
+
+export interface PendingSafekeepingWithdrawal {
+  id: number;
+  date: string;
+  amount: number;
+  reference: string;
+  notes?: string | null;
+  accountId: number;
+  depositorName: string;
+  requestedBy: string;
+}
+
+export interface SafekeepingAccountDetail {
+  id: number;
+  depositorName: string;
+  phone: string;
+  nationalId?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  openedBy: string;
+  dateFirstLeft?: string | null;
+  lastCollection?: string | null;
+  totalDeposited: number;
+  totalCollected: number;
+  pendingCollections: number;
+  currentBalance: number;
+  transactionCount: number;
+  statement: SafekeepingStatementEntry[];
+}
+
 // ─── Reports ─────────────────────────────────────────────────────────────────
 export interface DailyCashReport {
   date: string;

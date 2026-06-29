@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Wallet, FileText, Users, AlertTriangle,
   ShieldOff, BarChart2, Bell, LogOut, Menu, X,
-  UserCog, KeyRound, ClipboardCheck
+  UserCog, KeyRound, ClipboardCheck, PiggyBank
 } from 'lucide-react';
 import { useState } from 'react';
 import { clearAuth, getStoredUser } from '@/lib/auth';
@@ -19,6 +19,7 @@ const navItems = [
   { href: '/cash',                label: 'Cash Management',   icon: Wallet,          roles: [] as string[], badge: false },
   { href: '/loans',               label: 'Loans',             icon: FileText,        roles: [] as string[], badge: false },
   { href: '/borrowers',           label: 'Borrowers',         icon: Users,           roles: [] as string[], badge: false },
+  { href: '/safekeeping',         label: 'Safekeeping',       icon: PiggyBank,       roles: [] as string[], badge: false },
   { href: '/loans/overdue',       label: 'Overdue Loans',     icon: AlertTriangle,   roles: [] as string[], badge: false },
   { href: '/loans/blacklisted',   label: 'Blacklist',         icon: ShieldOff,       roles: [] as string[], badge: false },
   { href: '/reports',             label: 'Reports',           icon: BarChart2,       roles: [] as string[], badge: false },
@@ -36,11 +37,12 @@ export default function Sidebar() {
   const { data: pendingData } = useQuery({
     queryKey: ['pendingCount'],
     queryFn: async () => {
-      const [cash, loans] = await Promise.all([
+      const [cash, loans, sk] = await Promise.all([
         api.get('/cash/pending').then(r => r.data as any[]).catch(() => []),
         api.get('/loan/pending').then(r => r.data).catch(() => ({ pendingApproval: [], pendingDisbursement: [] })),
+        api.get('/safekeeping/pending').then(r => r.data as any[]).catch(() => []),
       ]);
-      return cash.length + (loans.pendingApproval?.length ?? 0) + (loans.pendingDisbursement?.length ?? 0);
+      return cash.length + (loans.pendingApproval?.length ?? 0) + (loans.pendingDisbursement?.length ?? 0) + sk.length;
     },
     refetchInterval: 60_000,
     retry: false,
