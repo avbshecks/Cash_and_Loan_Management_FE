@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Wallet, FileText, Users, AlertTriangle,
   ShieldOff, BarChart2, Bell, LogOut, Menu, X,
-  UserCog, KeyRound, ClipboardCheck, PiggyBank
+  UserCog, KeyRound, ClipboardCheck, PiggyBank, Calculator
 } from 'lucide-react';
 import { useState } from 'react';
 import { clearAuth, getStoredUser } from '@/lib/auth';
@@ -20,6 +20,7 @@ const navItems = [
   { href: '/loans',               label: 'Loans',             icon: FileText,        roles: [] as string[], badge: false },
   { href: '/borrowers',           label: 'Borrowers',         icon: Users,           roles: [] as string[], badge: false },
   { href: '/safekeeping',         label: 'Safekeeping',       icon: PiggyBank,       roles: [] as string[], badge: false },
+  { href: '/accountant',          label: 'Accountant Book',   icon: Calculator,      roles: ['Admin', 'Manager', 'Accountant'], badge: false },
   { href: '/loans/overdue',       label: 'Overdue Loans',     icon: AlertTriangle,   roles: [] as string[], badge: false },
   { href: '/loans/blacklisted',   label: 'Blacklist',         icon: ShieldOff,       roles: [] as string[], badge: false },
   { href: '/reports',             label: 'Reports',           icon: BarChart2,       roles: [] as string[], badge: false },

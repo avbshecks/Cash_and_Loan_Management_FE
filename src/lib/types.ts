@@ -258,6 +258,26 @@ export interface SafekeepingAccountDetail {
   statement: SafekeepingStatementEntry[];
 }
 
+// ─── Accountant book ─────────────────────────────────────────────────────────
+export interface AccountantLedgerEntry {
+  id: number;
+  date: string;
+  amount: number;
+  type: string;
+  sourceOrPurpose: string;
+  reference: string;
+  createdBy: string;
+}
+
+export interface AccountantDailyReport {
+  date: string;
+  openingBalance: number;
+  totalAdded: number;
+  totalDisbursed: number;
+  closingBalance: number;
+  transactions: AccountantLedgerEntry[];
+}
+
 // ─── Reports ─────────────────────────────────────────────────────────────────
 export interface DailyCashReport {
   date: string;
