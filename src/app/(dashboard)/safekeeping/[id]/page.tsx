@@ -7,14 +7,29 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import {
   ArrowLeft, PiggyBank, Loader2, X, CheckCircle,
-  ArrowDownCircle, ArrowUpCircle, Calendar, Wallet
+  ArrowDownCircle, ArrowUpCircle, Calendar, Wallet,
+  FileSpreadsheet, FileDown
 } from 'lucide-react';
 import api from '@/lib/api';
 import { SafekeepingAccountDetail } from '@/lib/types';
 import Header from '@/components/Header';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import { getToken } from '@/lib/auth';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+async function downloadFile(url: string, filename: string) {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${url}`, {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+  if (!res.ok) { alert('Download failed.'); return; }
+  const blob = await res.blob();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
 const dt = (s?: string | null) => (s ? new Date(s).toLocaleString() : '—');
 const d = (s?: string | null) => (s ? new Date(s).toLocaleDateString() : '—');
 
@@ -55,7 +70,15 @@ export default function SafekeepingDetailPage() {
             <p className="text-2xl font-bold text-blue-700">{usd(acc.currentBalance)}</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => downloadFile(`/safekeeping/accounts/${id}/statement/export?format=xlsx`, `CALM_Safekeeping_${acc.depositorName.replace(/ /g, '_')}.xlsx`)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition">
+            <FileSpreadsheet size={13} /> Excel
+          </button>
+          <button onClick={() => downloadFile(`/safekeeping/accounts/${id}/statement/export?format=pdf`, `CALM_Safekeeping_${acc.depositorName.replace(/ /g, '_')}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition">
+            <FileDown size={13} /> PDF
+          </button>
           <button onClick={() => setModal('deposit')}
             className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition">
             <ArrowDownCircle size={16} /> Leave Money

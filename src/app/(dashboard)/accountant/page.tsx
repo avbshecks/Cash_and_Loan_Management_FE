@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import {
   Calculator, PlusCircle, MinusCircle, ListOrdered, Sunrise,
-  Loader2, CheckCircle, Hash, FileSpreadsheet, TrendingUp, TrendingDown, DollarSign
+  Loader2, CheckCircle, Hash, FileSpreadsheet, FileDown, TrendingUp, TrendingDown, DollarSign
 } from 'lucide-react';
 import api from '@/lib/api';
 import { AccountantDailyReport } from '@/lib/types';
@@ -125,22 +125,53 @@ function MovementForm({ mode, title, note, qc }: { mode: string; title: string; 
 function DailyReportTab() {
   const today = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(today);
+  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+
+  const isCustom  = period === 'custom';
+  const validRange = !isCustom || (from && to && from <= to);
+  const qs = isCustom ? `from=${from}&to=${to}&period=custom` : `date=${date}&period=${period}`;
 
   const { data, isLoading } = useQuery<AccountantDailyReport>({
-    queryKey: ['accountantDaily', date],
-    queryFn: () => api.get(`/accountant/daily-report?date=${date}`).then(r => r.data),
+    queryKey: ['accountantDaily', date, period, from, to],
+    queryFn: () => api.get(`/accountant/daily-report?${qs}`).then(r => r.data),
+    enabled: !!validRange,
   });
 
   return (
     <div className="space-y-5">
       <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex flex-wrap items-center gap-4">
-        <span className="text-sm font-medium text-slate-600">Date:</span>
-        <input type="date" value={date} max={today} onChange={e => setDate(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
-        <button onClick={() => downloadExcel(`/accountant/daily-report/export?date=${date}`, `CALM_Accountant_Daily_${date}.xlsx`)}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition">
-          <FileSpreadsheet size={13} /> Excel (DR/CR)
-        </button>
+        <span className="text-sm font-medium text-slate-600">Period:</span>
+        <select value={period} onChange={e => setPeriod(e.target.value as any)}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        {isCustom ? (
+          <>
+            <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+            <span className="text-xs text-slate-400">to</span>
+            <input type="date" value={to} min={from} max={today} onChange={e => setTo(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+          </>
+        ) : (
+          <input type="date" value={date} max={today} onChange={e => setDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+        )}
+        <div className="ml-auto flex gap-2">
+          <button disabled={!validRange} onClick={() => downloadExcel(`/accountant/daily-report/export?${qs}&format=xlsx`, `CALM_Accountant_${period}.xlsx`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition disabled:opacity-50">
+            <FileSpreadsheet size={13} /> Excel (DR/CR)
+          </button>
+          <button disabled={!validRange} onClick={() => downloadExcel(`/accountant/daily-report/export?${qs}&format=pdf`, `CALM_Accountant_${period}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition disabled:opacity-50">
+            <FileDown size={13} /> PDF
+          </button>
+        </div>
       </div>
 
       {isLoading ? <LoadingSpinner /> : !data ? null : (

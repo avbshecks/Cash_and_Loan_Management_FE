@@ -4,20 +4,44 @@ import { useState, forwardRef } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { PiggyBank, Plus, X, Loader2, Search, Wallet } from 'lucide-react';
+import { PiggyBank, Plus, X, Loader2, Search, Wallet, FileSpreadsheet, FileDown } from 'lucide-react';
 import api from '@/lib/api';
 import { SafekeepingAccountSummary } from '@/lib/types';
 import Header from '@/components/Header';
 import StatCard from '@/components/StatCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
+import { getToken } from '@/lib/auth';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+async function downloadFile(url: string, filename: string) {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${url}`, {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+  if (!res.ok) { alert('Download failed.'); return; }
+  const blob = await res.blob();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
 
 export default function SafekeepingPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [period, setPeriod] = useState<'weekly' | 'monthly' | 'custom'>('weekly');
+  const today = new Date().toISOString().split('T')[0];
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+
+  const periodQs = (format: string) =>
+    period === 'custom'
+      ? `/safekeeping/report/period/export?from=${from}&to=${to}&format=${format}`
+      : `/safekeeping/report/period/export?period=${period}&date=${today}&format=${format}`;
+  const validRange = period !== 'custom' || (from && to && from <= to);
 
   const { data, isLoading } = useQuery<{ totalHeld: number; accounts: SafekeepingAccountSummary[] }>({
     queryKey: ['safekeeping'],
@@ -48,6 +72,44 @@ export default function SafekeepingPage() {
           className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition">
           <Plus size={16} /> New Depositor
         </button>
+      </div>
+
+      {/* Reports toolbar */}
+      <div className="bg-white rounded-xl border border-slate-200 px-5 py-3 mb-5 flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-slate-600">Reports:</span>
+        <button onClick={() => downloadFile(`/safekeeping/report/export?format=xlsx`, `CALM_Safekeeping_Summary.xlsx`)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition">
+          <FileSpreadsheet size={13} /> Summary Excel
+        </button>
+        <button onClick={() => downloadFile(`/safekeeping/report/export?format=pdf`, `CALM_Safekeeping_Summary.pdf`)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition">
+          <FileDown size={13} /> Summary PDF
+        </button>
+        <div className="flex items-center gap-2 ml-auto flex-wrap">
+          <select value={period} onChange={e => setPeriod(e.target.value as any)}
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white">
+            <option value="weekly">This Week</option>
+            <option value="monthly">This Month</option>
+            <option value="custom">Custom Range</option>
+          </select>
+          {period === 'custom' && (
+            <>
+              <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+              <span className="text-xs text-slate-400">to</span>
+              <input type="date" value={to} min={from} max={today} onChange={e => setTo(e.target.value)}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+            </>
+          )}
+          <button disabled={!validRange} onClick={() => downloadFile(periodQs('xlsx'), `CALM_Safekeeping_${period}.xlsx`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition disabled:opacity-50">
+            <FileSpreadsheet size={13} /> Excel
+          </button>
+          <button disabled={!validRange} onClick={() => downloadFile(periodQs('pdf'), `CALM_Safekeeping_${period}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition disabled:opacity-50">
+            <FileDown size={13} /> PDF
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

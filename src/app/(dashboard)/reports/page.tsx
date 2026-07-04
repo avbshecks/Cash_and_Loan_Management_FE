@@ -38,14 +38,16 @@ import { LoanReport } from '@/lib/types';
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-type Tab = 'daily' | 'monthly' | 'loans' | 'audit';
+type Tab = 'daily' | 'weekly' | 'monthly' | 'range' | 'loans' | 'audit';
 
 export default function ReportsPage() {
   const [tab, setTab] = useState<Tab>('daily');
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'daily',   label: 'Daily Cash',    icon: <DollarSign size={15} /> },
+    { key: 'weekly',  label: 'Weekly Report',  icon: <Calendar size={15} /> },
     { key: 'monthly', label: 'Monthly Report', icon: <Calendar size={15} /> },
+    { key: 'range',   label: 'Custom Range',   icon: <Calendar size={15} /> },
     { key: 'loans',   label: 'Loan Report',   icon: <FileText size={15} /> },
     { key: 'audit',   label: 'Audit Log',     icon: <ClipboardList size={15} /> },
   ];
@@ -65,7 +67,9 @@ export default function ReportsPage() {
       </div>
 
       {tab === 'daily'   && <DailyCashReport />}
+      {tab === 'weekly'  && <WeeklyCashReport />}
       {tab === 'monthly' && <MonthlyCashReport />}
+      {tab === 'range'   && <RangeCashReport />}
       {tab === 'loans'   && <LoanReportView />}
       {tab === 'audit'   && <AuditLogView />}
     </div>
@@ -256,6 +260,116 @@ function DailyCashReport() {
 }
 
 // ─── Monthly Cash Report ──────────────────────────────────────────────────────
+// ─── Weekly Cash Report ───────────────────────────────────────────────────────
+function WeeklyCashReport() {
+  // anchorDate = any date inside the displayed week
+  const [anchorDate, setAnchorDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['weeklyCash', anchorDate],
+    queryFn: () => api.get(`/report/weekly-cash?date=${anchorDate}`).then(r => r.data),
+    staleTime: 0,
+  });
+
+  const shiftWeek = (deltaDays: number) => {
+    const d = new Date(anchorDate + 'T00:00:00');
+    d.setDate(d.getDate() + deltaDays);
+    setAnchorDate(d.toISOString().split('T')[0]);
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Week selector + downloads */}
+      <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex flex-wrap items-center gap-4">
+        <button onClick={() => shiftWeek(-7)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition">
+          <ChevronLeft size={18} />
+        </button>
+        <span className="text-base font-semibold text-slate-800 min-w-[200px] text-center">
+          {data?.label ?? '…'}
+        </span>
+        <button onClick={() => shiftWeek(7)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition">
+          <ChevronRight size={18} />
+        </button>
+        <div className="flex gap-2 ml-auto">
+          <button onClick={() => downloadReport(`/report/weekly-cash/export?date=${anchorDate}&format=xlsx`, `CALM_Weekly_${data?.weekStart ?? anchorDate}.xlsx`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition">
+            <FileSpreadsheet size={13} /> Excel
+          </button>
+          <button onClick={() => downloadReport(`/report/weekly-cash/export?date=${anchorDate}&format=pdf`, `CALM_Weekly_${data?.weekStart ?? anchorDate}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition">
+            <FileDown size={13} /> PDF
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? <LoadingSpinner /> : isError ? (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-4 text-sm">Failed to load.</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: 'Total Added',     value: usd(data.totalAdditions),          text: 'text-green-700',  bg: 'bg-green-50 border-green-200' },
+              { label: 'Total Disbursed', value: usd(data.totalDisbursements),      text: 'text-red-700',    bg: 'bg-red-50 border-red-200' },
+              { label: 'Net Cash Flow',   value: usd(data.netCashFlow),             text: data.netCashFlow >= 0 ? 'text-emerald-700' : 'text-red-700', bg: data.netCashFlow >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200' },
+              { label: 'Loans Issued',    value: `${data.newLoansCount} loans`,     text: 'text-blue-700',   bg: 'bg-blue-50 border-blue-200' },
+              { label: 'Repayments In',   value: usd(data.totalRepaymentsCollected),text: 'text-amber-700',  bg: 'bg-amber-50 border-amber-200' },
+              { label: 'Active Days',     value: `${data.activeDays} / 7`,          text: 'text-slate-700',  bg: 'bg-slate-50 border-slate-200' },
+            ].map(({ label, value, text, bg }) => (
+              <div key={label} className={`rounded-xl border p-4 ${bg}`}>
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">{label}</p>
+                <p className={`text-xl font-bold ${text}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Day-by-day table */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-700 text-sm">Day-by-Day Breakdown</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>{['Date', 'Day', 'Cash In', 'Cash Out', 'Net', 'Transactions'].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {data.days.map((d: any) => (
+                    <tr key={d.date} className={`hover:bg-slate-50 transition ${d.txnCount === 0 ? 'opacity-40' : ''}`}>
+                      <td className="px-4 py-2.5 font-medium text-slate-700">
+                        {new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-500 text-xs">{d.dayOfWeek.slice(0, 3)}</td>
+                      <td className="px-4 py-2.5 text-green-600 font-medium">{d.additions > 0 ? usd(d.additions) : '—'}</td>
+                      <td className="px-4 py-2.5 text-red-600 font-medium">{d.disbursements > 0 ? usd(d.disbursements) : '—'}</td>
+                      <td className={`px-4 py-2.5 font-semibold ${d.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {d.net !== 0 ? `${d.net > 0 ? '+' : ''}${usd(d.net)}` : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-500">{d.txnCount > 0 ? d.txnCount : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                  <tr>
+                    <td colSpan={2} className="px-4 py-3 text-xs font-bold text-slate-600 uppercase tracking-wide">Total</td>
+                    <td className="px-4 py-3 text-green-700 font-bold">{usd(data.totalAdditions)}</td>
+                    <td className="px-4 py-3 text-red-700 font-bold">{usd(data.totalDisbursements)}</td>
+                    <td className={`px-4 py-3 font-bold ${data.netCashFlow >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {data.netCashFlow > 0 ? '+' : ''}{usd(data.netCashFlow)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 font-bold">{data.days.reduce((s: number, d: any) => s + d.txnCount, 0)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function MonthlyCashReport() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -396,8 +510,117 @@ function MonthlyCashReport() {
   );
 }
 
+// ─── Custom Range Cash Report ─────────────────────────────────────────────────
+function RangeCashReport() {
+  const today = new Date().toISOString().split('T')[0];
+  const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().split('T')[0];
+  const [from, setFrom] = useState(weekAgo);
+  const [to, setTo] = useState(today);
+
+  const valid = from && to && from <= to;
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['rangeCash', from, to],
+    queryFn: () => api.get(`/report/range-cash?from=${from}&to=${to}`).then(r => r.data),
+    enabled: !!valid,
+    staleTime: 0,
+  });
+
+  return (
+    <div className="space-y-5">
+      {/* Range picker + downloads */}
+      <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex flex-wrap items-center gap-4">
+        <span className="text-sm font-medium text-slate-600">From:</span>
+        <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+        <span className="text-sm font-medium text-slate-600">To:</span>
+        <input type="date" value={to} min={from} max={today} onChange={e => setTo(e.target.value)}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+        <div className="flex gap-2 ml-auto">
+          <button disabled={!valid} onClick={() => downloadReport(`/report/range-cash/export?from=${from}&to=${to}&format=xlsx`, `CALM_Cash_${from}_${to}.xlsx`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition disabled:opacity-50">
+            <FileSpreadsheet size={13} /> Excel
+          </button>
+          <button disabled={!valid} onClick={() => downloadReport(`/report/range-cash/export?from=${from}&to=${to}&format=pdf`, `CALM_Cash_${from}_${to}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition disabled:opacity-50">
+            <FileDown size={13} /> PDF
+          </button>
+        </div>
+      </div>
+
+      {!valid ? (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-5 py-4 text-sm">Select a valid date range (From must be on or before To).</div>
+      ) : isLoading ? <LoadingSpinner /> : isError ? (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-4 text-sm">
+          {(error as any)?.response?.data?.message ?? 'Failed to load.'}
+        </div>
+      ) : !data ? null : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: 'Total Added',     value: usd(data.totalAdditions),          text: 'text-green-700',  bg: 'bg-green-50 border-green-200' },
+              { label: 'Total Disbursed', value: usd(data.totalDisbursements),      text: 'text-red-700',    bg: 'bg-red-50 border-red-200' },
+              { label: 'Net Cash Flow',   value: usd(data.netCashFlow),             text: data.netCashFlow >= 0 ? 'text-emerald-700' : 'text-red-700', bg: data.netCashFlow >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200' },
+              { label: 'Loans Issued',    value: `${data.newLoansCount} loans`,     text: 'text-blue-700',   bg: 'bg-blue-50 border-blue-200' },
+              { label: 'Repayments In',   value: usd(data.totalRepaymentsCollected),text: 'text-amber-700',  bg: 'bg-amber-50 border-amber-200' },
+              { label: 'Active Days',     value: `${data.activeDays} / ${data.days.length}`, text: 'text-slate-700', bg: 'bg-slate-50 border-slate-200' },
+            ].map(({ label, value, text, bg }) => (
+              <div key={label} className={`rounded-xl border p-4 ${bg}`}>
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">{label}</p>
+                <p className={`text-xl font-bold ${text}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-700 text-sm">Day-by-Day Breakdown — {data.label}</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>{['Date', 'Day', 'Cash In', 'Cash Out', 'Net', 'Transactions'].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                  ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {data.days.map((d: any) => (
+                    <tr key={d.date} className={`hover:bg-slate-50 transition ${d.txnCount === 0 ? 'opacity-40' : ''}`}>
+                      <td className="px-4 py-2.5 font-medium text-slate-700">
+                        {new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-500 text-xs">{d.dayOfWeek.slice(0, 3)}</td>
+                      <td className="px-4 py-2.5 text-green-600 font-medium">{d.additions > 0 ? usd(d.additions) : '—'}</td>
+                      <td className="px-4 py-2.5 text-red-600 font-medium">{d.disbursements > 0 ? usd(d.disbursements) : '—'}</td>
+                      <td className={`px-4 py-2.5 font-semibold ${d.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {d.net !== 0 ? `${d.net > 0 ? '+' : ''}${usd(d.net)}` : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-500">{d.txnCount > 0 ? d.txnCount : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Loan Report ──────────────────────────────────────────────────────────────
 function LoanReportView() {
+  const today = new Date().toISOString().split('T')[0];
+  const [period, setPeriod] = useState<'weekly' | 'monthly' | 'custom'>('weekly');
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+
+  const exportQs = (format: string) =>
+    period === 'custom'
+      ? `/report/loans/period/export?from=${from}&to=${to}&format=${format}`
+      : `/report/loans/period/export?period=${period}&date=${today}&format=${format}`;
+  const validRange = period !== 'custom' || (from && to && from <= to);
+
   const { data, isLoading, isError } = useQuery<LoanReport & { recentLoans: any[] }>({
     queryKey: ['loanReport'],
     queryFn: () => api.get('/report/loans').then(r => r.data),
@@ -406,6 +629,36 @@ function LoanReportView() {
 
   return (
     <div className="space-y-5">
+      {/* Period export toolbar */}
+      <div className="bg-white rounded-xl border border-slate-200 px-5 py-3 flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-slate-600">Period report:</span>
+        <select value={period} onChange={e => setPeriod(e.target.value as any)}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white">
+          <option value="weekly">This Week</option>
+          <option value="monthly">This Month</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        {period === 'custom' && (
+          <>
+            <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+            <span className="text-xs text-slate-400">to</span>
+            <input type="date" value={to} min={from} max={today} onChange={e => setTo(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+          </>
+        )}
+        <div className="flex gap-2 ml-auto">
+          <button disabled={!validRange} onClick={() => downloadReport(exportQs('xlsx'), `CALM_Loans_${period}.xlsx`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition disabled:opacity-50">
+            <FileSpreadsheet size={13} /> Excel
+          </button>
+          <button disabled={!validRange} onClick={() => downloadReport(exportQs('pdf'), `CALM_Loans_${period}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition disabled:opacity-50">
+            <FileDown size={13} /> PDF
+          </button>
+        </div>
+      </div>
+
       {isLoading ? <LoadingSpinner /> : isError ? (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-4 text-sm">Failed to load.</div>
       ) : !data ? null : (
