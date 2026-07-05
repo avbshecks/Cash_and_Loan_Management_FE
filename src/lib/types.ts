@@ -62,9 +62,23 @@ export interface CashLedgerEntry {
   rejectionReason?: string | null;
   isReversed: boolean;
   isReversal: boolean;
+  reversalStatus?: string | null;   // null | "Pending" | "Approved" | "Rejected"
   createdBy: string;
   approvedBy?: string | null;
   approvedAt?: string | null;
+}
+
+export interface PendingReversal {
+  id: number;
+  date: string;
+  amount: number;
+  type: string;
+  sourceOrPurpose: string;
+  reference: string;
+  reversalReason: string;
+  reversalRequestedAt: string;
+  requestedBy: string;
+  originalPostedBy: string;
 }
 
 export interface AddCashRequest {
@@ -267,6 +281,9 @@ export interface AccountantLedgerEntry {
   sourceOrPurpose: string;
   reference: string;
   createdBy: string;
+  isReversed: boolean;
+  isReversal: boolean;
+  reversalStatus?: string | null;
 }
 
 export interface AccountantDailyReport {

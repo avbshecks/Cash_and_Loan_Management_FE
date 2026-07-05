@@ -13,7 +13,9 @@ import Header from '@/components/Header';
 import StatCard from '@/components/StatCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
-import { getToken } from '@/lib/auth';
+import { getToken, getStoredUser } from '@/lib/auth';
+import { canAccountant, canRequestReversal } from '@/lib/permissions';
+import { RotateCcw, X as XIcon } from 'lucide-react';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -42,19 +44,22 @@ export default function AccountantPage() {
   });
 
   const initialized = balance?.initialized ?? true;
+  const bookEntry = canAccountant(getStoredUser()?.role);   // Admin & Accountant may post to the book
 
   useEffect(() => {
-    if (balance && !initialized) setTab('opening');
-    else if (balance && initialized && tab === 'opening') setTab('report');
+    if (balance && !initialized && bookEntry) setTab('opening');
+    else if (balance && (initialized || !bookEntry) && tab === 'opening') setTab('report');
   }, [balance, initialized]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = initialized
-    ? [
-        { key: 'report',   label: 'Daily Report', icon: <ListOrdered size={15} /> },
-        { key: 'add',      label: 'Cash In',      icon: <PlusCircle size={15} /> },
-        { key: 'disburse', label: 'Cash Out',     icon: <MinusCircle size={15} /> },
-      ]
-    : [{ key: 'opening', label: 'Initial Balance', icon: <Sunrise size={15} /> }];
+  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = !initialized
+    ? (bookEntry ? [{ key: 'opening', label: 'Initial Balance', icon: <Sunrise size={15} /> }]
+                 : [{ key: 'report', label: 'Daily Report', icon: <ListOrdered size={15} /> }])
+    : bookEntry
+      ? [
+          { key: 'report',   label: 'Daily Report', icon: <ListOrdered size={15} /> },
+          { key: 'add',      label: 'Cash In',      icon: <PlusCircle size={15} /> },
+          { key: 'disburse', label: 'Cash Out',     icon: <MinusCircle size={15} /> },
+        ]
+      : [{ key: 'report', label: 'Daily Report', icon: <ListOrdered size={15} /> }];
 
   return (
     <div>
@@ -123,11 +128,14 @@ function MovementForm({ mode, title, note, qc }: { mode: string; title: string; 
 }
 
 function DailyReportTab() {
+  const qc = useQueryClient();
   const today = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(today);
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
+  const [reverseTarget, setReverseTarget] = useState<{ id: number; reference: string; amount: number; type: string } | null>(null);
+  const allowReverse = canRequestReversal(getStoredUser()?.role);
 
   const isCustom  = period === 'custom';
   const validRange = !isCustom || (from && to && from <= to);
@@ -200,22 +208,38 @@ function DailyReportTab() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>{['Time', 'Type', 'DR (USD)', 'CR (USD)', 'Source / Purpose', 'Reference', 'By'].map(h => (
+                    <tr>{['Time', 'Type', 'DR (USD)', 'CR (USD)', 'Source / Purpose', 'Reference', 'By', ...(allowReverse ? ['Action'] : [])].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                     ))}</tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {data.transactions.map(t => {
                       const isDebit = t.type === 'Disbursement';
+                      const reversible = allowReverse && !t.isReversed && !t.isReversal && !t.reversalStatus;
                       return (
-                        <tr key={t.id} className="hover:bg-slate-50 transition">
+                        <tr key={t.id} className={`hover:bg-slate-50 transition ${t.isReversed ? 'opacity-50' : ''}`}>
                           <td className="px-4 py-3 text-xs text-slate-500">{new Date(t.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
                           <td className="px-4 py-3 text-slate-600">{t.type === 'OpeningBalance' ? 'Opening' : t.type}</td>
                           <td className="px-4 py-3 font-semibold text-red-600">{isDebit ? `-${usd(t.amount)}` : ''}</td>
                           <td className="px-4 py-3 font-semibold text-green-600">{!isDebit ? usd(t.amount) : ''}</td>
-                          <td className="px-4 py-3 text-slate-600 max-w-xs truncate">{t.sourceOrPurpose}</td>
+                          <td className="px-4 py-3 text-slate-600 max-w-xs truncate">
+                            {t.sourceOrPurpose}
+                            {t.isReversed && <span className="ml-2 text-xs text-red-500 font-medium">(reversed)</span>}
+                            {t.isReversal && <span className="ml-2 text-xs text-blue-500 font-medium">(reversal)</span>}
+                            {t.reversalStatus === 'Pending' && <span className="ml-2 text-xs text-amber-600 font-medium">(reversal pending)</span>}
+                          </td>
                           <td className="px-4 py-3 font-mono text-xs text-slate-500">{t.reference}</td>
                           <td className="px-4 py-3 text-xs text-slate-400">{t.createdBy}</td>
+                          {allowReverse && (
+                            <td className="px-4 py-3">
+                              {reversible && (
+                                <button onClick={() => setReverseTarget({ id: t.id, reference: t.reference, amount: t.amount, type: t.type })}
+                                  className="flex items-center gap-1 text-xs bg-red-50 text-red-700 px-2.5 py-1 rounded-md hover:bg-red-100 transition font-medium">
+                                  <RotateCcw size={12} /> Request Reversal
+                                </button>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -226,6 +250,55 @@ function DailyReportTab() {
           </div>
         </>
       )}
+      {reverseTarget && <ReverseModal target={reverseTarget} onClose={() => setReverseTarget(null)} qc={qc} />}
+    </div>
+  );
+}
+
+function ReverseModal({ target, onClose, qc }: { target: { id: number; reference: string; amount: number; type: string }; onClose: () => void; qc: any }) {
+  const { register, handleSubmit } = useForm<{ reason: string }>();
+  const [ok, setOk] = useState('');
+  const [err, setErr] = useState('');
+
+  const mut = useMutation({
+    mutationFn: (reason: string) => api.post(`/accountant/reverse/${target.id}`, reason, { headers: { 'Content-Type': 'application/json' } }),
+    onSuccess: (res) => {
+      setOk(res.data.message);
+      qc.invalidateQueries({ queryKey: ['accountantDaily'] });
+      qc.invalidateQueries({ queryKey: ['pendingCount'] });
+    },
+    onError: (e: any) => setErr(e.response?.data?.message ?? 'Failed'),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl w-full max-w-sm shadow-xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <h2 className="font-semibold text-slate-800">Request Reversal</h2>
+          <button onClick={onClose}><XIcon size={18} className="text-slate-400" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-sm text-amber-800">
+            Requesting reversal of <strong>{target.reference}</strong> ({usd(target.amount)} {target.type}). This needs Manager approval before a contra entry is posted.
+          </div>
+          {ok && <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm"><CheckCircle size={15} /> {ok}</div>}
+          {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{err}</div>}
+          {!ok && (
+            <form onSubmit={handleSubmit(d => { setErr(''); mut.mutate(d.reason); })} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Reason for reversal</label>
+                <textarea {...register('reason', { required: true })} rows={3} placeholder="e.g. Amount captured as 1000 instead of 100"
+                  className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+              </div>
+              <button type="submit" disabled={mut.isPending}
+                className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 rounded-lg text-sm transition flex items-center justify-center gap-2 disabled:opacity-60">
+                {mut.isPending ? <><Loader2 size={15} className="animate-spin" /> Submitting…</> : <><RotateCcw size={15} /> Submit Request</>}
+              </button>
+            </form>
+          )}
+          {ok && <button onClick={onClose} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg text-sm transition">Close</button>}
+        </div>
+      </div>
     </div>
   );
 }

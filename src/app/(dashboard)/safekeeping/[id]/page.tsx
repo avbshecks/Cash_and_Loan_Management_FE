@@ -14,7 +14,8 @@ import api from '@/lib/api';
 import { SafekeepingAccountDetail } from '@/lib/types';
 import Header from '@/components/Header';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { getToken } from '@/lib/auth';
+import { getToken, getStoredUser } from '@/lib/auth';
+import { canEntry } from '@/lib/permissions';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -79,14 +80,14 @@ export default function SafekeepingDetailPage() {
             className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition">
             <FileDown size={13} /> PDF
           </button>
-          <button onClick={() => setModal('deposit')}
+          {canEntry(getStoredUser()?.role) && <><button onClick={() => setModal('deposit')}
             className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition">
             <ArrowDownCircle size={16} /> Leave Money
           </button>
           <button onClick={() => setModal('withdraw')} disabled={acc.currentBalance <= 0}
             className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition disabled:opacity-50">
             <ArrowUpCircle size={16} /> Collect Money
-          </button>
+          </button></>}
         </div>
       </div>
 

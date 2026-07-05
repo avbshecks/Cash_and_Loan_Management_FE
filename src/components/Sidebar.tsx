@@ -13,16 +13,18 @@ import { clearAuth, getStoredUser } from '@/lib/auth';
 import api from '@/lib/api';
 import CalmLogo from './CalmLogo';
 
+// roles: [] = visible to everyone. Accountant only sees their book + reports.
+const OPS = ['Admin', 'Cashier', 'Finance Officer', 'Manager', 'Auditor']; // all except Accountant
 const navItems = [
   { href: '/dashboard',           label: 'Dashboard',         icon: LayoutDashboard, roles: [] as string[], badge: false },
-  { href: '/pending-approvals',   label: 'Pending Approvals', icon: ClipboardCheck,  roles: [] as string[], badge: true  },
-  { href: '/cash',                label: 'Cash Management',   icon: Wallet,          roles: [] as string[], badge: false },
-  { href: '/loans',               label: 'Loans',             icon: FileText,        roles: [] as string[], badge: false },
-  { href: '/borrowers',           label: 'Borrowers',         icon: Users,           roles: [] as string[], badge: false },
-  { href: '/safekeeping',         label: 'Safekeeping',       icon: PiggyBank,       roles: [] as string[], badge: false },
-  { href: '/accountant',          label: 'Accountant Book',   icon: Calculator,      roles: ['Admin', 'Manager', 'Accountant'], badge: false },
-  { href: '/loans/overdue',       label: 'Overdue Loans',     icon: AlertTriangle,   roles: [] as string[], badge: false },
-  { href: '/loans/blacklisted',   label: 'Blacklist',         icon: ShieldOff,       roles: [] as string[], badge: false },
+  { href: '/pending-approvals',   label: 'Pending Approvals', icon: ClipboardCheck,  roles: ['Admin', 'Manager'], badge: true  },
+  { href: '/cash',                label: 'Cash Management',   icon: Wallet,          roles: OPS, badge: false },
+  { href: '/loans',               label: 'Loans',             icon: FileText,        roles: OPS, badge: false },
+  { href: '/borrowers',           label: 'Borrowers',         icon: Users,           roles: OPS, badge: false },
+  { href: '/safekeeping',         label: 'Safekeeping',       icon: PiggyBank,       roles: OPS, badge: false },
+  { href: '/accountant',          label: 'Accountant Book',   icon: Calculator,      roles: ['Admin', 'Manager', 'Accountant', 'Finance Officer', 'Auditor'], badge: false },
+  { href: '/loans/overdue',       label: 'Overdue Loans',     icon: AlertTriangle,   roles: OPS, badge: false },
+  { href: '/loans/blacklisted',   label: 'Blacklist',         icon: ShieldOff,       roles: OPS, badge: false },
   { href: '/reports',             label: 'Reports',           icon: BarChart2,       roles: [] as string[], badge: false },
   { href: '/notifications',       label: 'Notifications',     icon: Bell,            roles: [] as string[], badge: false },
   { href: '/users',               label: 'User Management',   icon: UserCog,         roles: ['Admin'],      badge: false },
@@ -38,12 +40,14 @@ export default function Sidebar() {
   const { data: pendingData } = useQuery({
     queryKey: ['pendingCount'],
     queryFn: async () => {
-      const [cash, loans, sk] = await Promise.all([
+      const [cash, loans, sk, cashRev, acctRev] = await Promise.all([
         api.get('/cash/pending').then(r => r.data as any[]).catch(() => []),
         api.get('/loan/pending').then(r => r.data).catch(() => ({ pendingApproval: [], pendingDisbursement: [] })),
         api.get('/safekeeping/pending').then(r => r.data as any[]).catch(() => []),
+        api.get('/cash/pending-reversals').then(r => r.data as any[]).catch(() => []),
+        api.get('/accountant/pending-reversals').then(r => r.data as any[]).catch(() => []),
       ]);
-      return cash.length + (loans.pendingApproval?.length ?? 0) + (loans.pendingDisbursement?.length ?? 0) + sk.length;
+      return cash.length + (loans.pendingApproval?.length ?? 0) + (loans.pendingDisbursement?.length ?? 0) + sk.length + cashRev.length + acctRev.length;
     },
     refetchInterval: 60_000,
     retry: false,

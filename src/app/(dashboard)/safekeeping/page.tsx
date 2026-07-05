@@ -11,7 +11,8 @@ import Header from '@/components/Header';
 import StatCard from '@/components/StatCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
-import { getToken } from '@/lib/auth';
+import { getToken, getStoredUser } from '@/lib/auth';
+import { canEntry } from '@/lib/permissions';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -68,10 +69,10 @@ export default function SafekeepingPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search depositor…"
             className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-400 w-64" />
         </div>
-        <button onClick={() => setShowCreate(true)}
+        {canEntry(getStoredUser()?.role) && <button onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition">
           <Plus size={16} /> New Depositor
-        </button>
+        </button>}
       </div>
 
       {/* Reports toolbar */}

@@ -13,6 +13,8 @@ import api from '@/lib/api';
 import Header from '@/components/Header';
 import Badge, { statusVariant } from '@/components/Badge';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import { getStoredUser } from '@/lib/auth';
+import { canEntry } from '@/lib/permissions';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
@@ -42,7 +44,7 @@ export default function LoanDetailPage() {
     </div>
   );
 
-  const canRepay = loan.status === 'Active' || loan.status === 'Overdue';
+  const canRepay = canEntry(getStoredUser()?.role) && (loan.status === 'Active' || loan.status === 'Overdue');
 
   return (
     <div>

@@ -11,6 +11,8 @@ import Header from '@/components/Header';
 import Badge, { statusVariant } from '@/components/Badge';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
+import { getStoredUser } from '@/lib/auth';
+import { canEntry, canApprove } from '@/lib/permissions';
 
 export default function LoansPage() {
   const qc = useQueryClient();
@@ -24,6 +26,10 @@ export default function LoansPage() {
     queryKey: ['loans'],
     queryFn: () => api.get('/loan/list').then(r => r.data).catch(() => []),
   });
+
+  const role = getStoredUser()?.role;
+  const entry = canEntry(role);
+  const approver = canApprove(role);
 
   const repayableLoans = loans.filter(l => l.status === 'Active' || l.status === 'Overdue');
 
@@ -48,7 +54,7 @@ export default function LoansPage() {
             className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-400 w-64"
           />
         </div>
-        <div className="flex gap-2">
+        {entry && <div className="flex gap-2">
           <button
             onClick={() => setShowQuickRepay(true)}
             className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition"
@@ -67,7 +73,7 @@ export default function LoansPage() {
           >
             <Plus size={16} /> New Loan
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -99,7 +105,7 @@ export default function LoansPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 items-center">
-                        {(loan.status === 'Pending' || loan.status === 'Approved') && (
+                        {approver && (loan.status === 'Pending' || loan.status === 'Approved') && (
                           <Link
                             href="/pending-approvals"
                             className="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-md hover:bg-amber-200 transition font-medium"
@@ -107,7 +113,7 @@ export default function LoansPage() {
                             {loan.status === 'Pending' ? 'Review' : 'Disburse'}
                           </Link>
                         )}
-                        {(loan.status === 'Active' || loan.status === 'Overdue') && (
+                        {entry && (loan.status === 'Active' || loan.status === 'Overdue') && (
                           <button
                             onClick={() => setRepayLoan(loan)}
                             className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-md hover:bg-green-200 transition font-medium"

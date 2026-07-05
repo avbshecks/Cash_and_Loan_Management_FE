@@ -9,6 +9,8 @@ import { Borrower, CreateBorrowerRequest } from '@/lib/types';
 import Header from '@/components/Header';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
+import { getStoredUser } from '@/lib/auth';
+import { canEntry } from '@/lib/permissions';
 
 export default function BorrowersPage() {
   const qc = useQueryClient();
@@ -39,12 +41,12 @@ export default function BorrowersPage() {
             className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-400 w-72"
           />
         </div>
-        <button
+        {canEntry(getStoredUser()?.role) && <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition"
         >
           <Plus size={16} /> Register Borrower
-        </button>
+        </button>}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

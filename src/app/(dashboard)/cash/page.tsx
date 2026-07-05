@@ -14,6 +14,7 @@ import StatCard from '@/components/StatCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
 import { getStoredUser } from '@/lib/auth';
+import { canEntry, canRequestReversal } from '@/lib/permissions';
 
 type Tab = 'opening' | 'add' | 'disburse' | 'reconcile' | 'transactions';
 
@@ -28,7 +29,9 @@ function ErrorMsg({ msg }: { msg: string }) {
 
 export default function CashPage() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>('add');
+  const role = getStoredUser()?.role;
+  const entry = canEntry(role);   // Admin & Cashier only may capture transactions
+  const [tab, setTab] = useState<Tab>(entry ? 'add' : 'transactions');
 
   const { data: balance, isLoading } = useQuery<CashBalance>({
     queryKey: ['balance'],
@@ -39,21 +42,24 @@ export default function CashPage() {
 
   // Before the system is initialized, force the one-time opening-balance setup
   useEffect(() => {
-    if (balance && !initialized) setTab('opening');
-    else if (balance && initialized && tab === 'opening') setTab('add');
+    if (balance && !initialized && entry) setTab('opening');
+    else if (balance && initialized && tab === 'opening') setTab(entry ? 'add' : 'transactions');
   }, [balance, initialized]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fmt = (n?: number) => (n != null ? usd(n) : '—');
 
-  // Opening tab only appears during one-time setup; transactions tab always (once initialized)
-  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = initialized
-    ? [
-        { key: 'add',          label: 'Add Cash',     icon: <PlusCircle size={15} /> },
-        { key: 'disburse',     label: 'Disburse',     icon: <MinusCircle size={15} /> },
-        { key: 'reconcile',    label: 'Reconcile',    icon: <ClipboardCheck size={15} /> },
-        { key: 'transactions', label: 'Transactions', icon: <ListOrdered size={15} /> },
-      ]
-    : [{ key: 'opening', label: 'Initial Balance', icon: <Sunrise size={15} /> }];
+  // Entry tabs only for Admin/Cashier; everyone else gets read-only Transactions.
+  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = !initialized
+    ? (entry ? [{ key: 'opening', label: 'Initial Balance', icon: <Sunrise size={15} /> }]
+             : [{ key: 'transactions', label: 'Transactions', icon: <ListOrdered size={15} /> }])
+    : entry
+      ? [
+          { key: 'add',          label: 'Add Cash',     icon: <PlusCircle size={15} /> },
+          { key: 'disburse',     label: 'Disburse',     icon: <MinusCircle size={15} /> },
+          { key: 'reconcile',    label: 'Reconcile',    icon: <ClipboardCheck size={15} /> },
+          { key: 'transactions', label: 'Transactions', icon: <ListOrdered size={15} /> },
+        ]
+      : [{ key: 'transactions', label: 'Transactions', icon: <ListOrdered size={15} /> }];
 
   return (
     <div>
@@ -219,7 +225,7 @@ function ReconcileForm({ qc, balance }: { qc: any; balance: number }) {
 // ─── Transactions ledger + reversal ───────────────────────────────────────────
 function TransactionsTab({ qc }: { qc: any }) {
   const role = getStoredUser()?.role;
-  const canReverse = role === 'Admin' || role === 'Manager';
+  const allowReverse = canRequestReversal(role);   // Cashier/Accountant/Admin may request; Manager/Admin approves separately
   const [reverseTarget, setReverseTarget] = useState<CashLedgerEntry | null>(null);
 
   const { data, isLoading } = useQuery<{ transactions: CashLedgerEntry[]; total: number }>({
@@ -237,14 +243,15 @@ function TransactionsTab({ qc }: { qc: any }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{['Date', 'Reference', 'Type', 'Amount', 'Source / Purpose', 'Status', canReverse ? 'Action' : ''].filter(Boolean).map(h => (
+              <tr>{['Date', 'Reference', 'Type', 'Amount', 'Source / Purpose', 'Status', allowReverse ? 'Action' : ''].filter(Boolean).map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
               ))}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {txns.map(t => {
                 const isCredit = t.type === 'Addition' || t.type === 'OpeningBalance';
-                const reversible = canReverse && !t.isReversed && !t.isReversal
+                const reversible = allowReverse && !t.isReversed && !t.isReversal
+                  && !t.reversalStatus
                   && (t.status === 'AutoApproved' || t.status === 'Approved');
                 return (
                   <tr key={t.id} className={`hover:bg-slate-50 transition ${t.isReversed ? 'opacity-50' : ''}`}>
@@ -264,19 +271,27 @@ function TransactionsTab({ qc }: { qc: any }) {
                       {t.isReversal && <span className="ml-2 text-xs text-blue-500 font-medium">(reversal)</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full
-                        ${t.status === 'Pending' ? 'bg-amber-100 text-amber-700'
-                          : t.status === 'Rejected' ? 'bg-slate-100 text-slate-500'
-                          : 'bg-green-100 text-green-700'}`}>
-                        {t.status === 'AutoApproved' ? 'Posted' : t.status}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full
+                          ${t.status === 'Pending' ? 'bg-amber-100 text-amber-700'
+                            : t.status === 'Rejected' ? 'bg-slate-100 text-slate-500'
+                            : 'bg-green-100 text-green-700'}`}>
+                          {t.status === 'AutoApproved' ? 'Posted' : t.status}
+                        </span>
+                        {t.reversalStatus === 'Pending' && (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Reversal Pending</span>
+                        )}
+                        {t.reversalStatus === 'Rejected' && (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Reversal Rejected</span>
+                        )}
+                      </div>
                     </td>
-                    {canReverse && (
+                    {allowReverse && (
                       <td className="px-4 py-3">
                         {reversible && (
                           <button onClick={() => setReverseTarget(t)}
                             className="flex items-center gap-1 text-xs bg-red-50 text-red-700 px-2.5 py-1 rounded-md hover:bg-red-100 transition font-medium">
-                            <RotateCcw size={12} /> Reverse
+                            <RotateCcw size={12} /> Request Reversal
                           </button>
                         )}
                       </td>
@@ -301,9 +316,9 @@ function ReverseModal({ entry, onClose, qc }: { entry: CashLedgerEntry; onClose:
   const mut = useMutation({
     mutationFn: (reason: string) => api.post(`/cash/reverse/${entry.id}`, reason, { headers: { 'Content-Type': 'application/json' } }),
     onSuccess: (res) => {
-      setOk(`${res.data.message} New balance: ${usd(res.data.newBalance)}`);
+      setOk(res.data.message);
       qc.invalidateQueries({ queryKey: ['cashLedger'] });
-      qc.invalidateQueries({ queryKey: ['balance'] });
+      qc.invalidateQueries({ queryKey: ['pendingCount'] });
     },
     onError: (e: any) => setErr(e.response?.data?.message ?? 'Failed'),
   });
@@ -312,12 +327,12 @@ function ReverseModal({ entry, onClose, qc }: { entry: CashLedgerEntry; onClose:
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl w-full max-w-sm shadow-xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 className="font-semibold text-slate-800">Reverse Transaction</h2>
+          <h2 className="font-semibold text-slate-800">Request Reversal</h2>
           <button onClick={onClose}><X size={18} className="text-slate-400" /></button>
         </div>
         <div className="p-6 space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-sm text-amber-800">
-            Reversing <strong>{entry.reference}</strong> ({usd(Math.abs(entry.amount))} {entry.type}). A contra entry will net it to zero; then post the correct amount.
+            Requesting reversal of <strong>{entry.reference}</strong> ({usd(Math.abs(entry.amount))} {entry.type}). This needs Manager approval before a contra entry is posted and the balance changes.
           </div>
           {ok && <SuccessMsg msg={ok} />}
           {err && <ErrorMsg msg={err} />}
@@ -330,7 +345,7 @@ function ReverseModal({ entry, onClose, qc }: { entry: CashLedgerEntry; onClose:
               </div>
               <button type="submit" disabled={mut.isPending}
                 className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 rounded-lg text-sm transition flex items-center justify-center gap-2 disabled:opacity-60">
-                {mut.isPending ? <><Loader2 size={15} className="animate-spin" /> Reversing…</> : <><RotateCcw size={15} /> Confirm Reversal</>}
+                {mut.isPending ? <><Loader2 size={15} className="animate-spin" /> Submitting…</> : <><RotateCcw size={15} /> Submit Request</>}
               </button>
             </form>
           )}
