@@ -8,14 +8,14 @@ import {
   XCircle, Loader2, X, AlertTriangle, Zap, PiggyBank, RotateCcw
 } from 'lucide-react';
 import api from '@/lib/api';
-import { PendingCashDisbursement, PendingLoan, PendingLoanRepayment, PendingSafekeepingWithdrawal, PendingReversal } from '@/lib/types';
+import { PendingCashDisbursement, PendingLoan, PendingLoanRepayment, PendingSafekeepingWithdrawal, PendingAccountantMovement, PendingReversal } from '@/lib/types';
 import Header from '@/components/Header';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
-type Tab = 'cash' | 'loan-approval' | 'loan-disburse' | 'repayments' | 'safekeeping' | 'reversals';
+type Tab = 'cash' | 'loan-approval' | 'loan-disburse' | 'repayments' | 'safekeeping' | 'accountant' | 'reversals';
 
 export default function PendingApprovalsPage() {
   const qc = useQueryClient();
@@ -45,6 +45,12 @@ export default function PendingApprovalsPage() {
     refetchInterval: 30_000,
   });
 
+  const { data: acctPending = [], isLoading: loadAcct } = useQuery<PendingAccountantMovement[]>({
+    queryKey: ['accountantPending'],
+    queryFn: () => api.get('/accountant/pending').then(r => r.data),
+    refetchInterval: 30_000,
+  });
+
   const { data: cashReversals = [], isLoading: loadCashRev } = useQuery<PendingReversal[]>({
     queryKey: ['cashReversalsPending'],
     queryFn: () => api.get('/cash/pending-reversals').then(r => r.data),
@@ -65,10 +71,11 @@ export default function PendingApprovalsPage() {
     { key: 'loan-disburse' as Tab, label: 'Loan Disbursements',  icon: <Zap size={14} />,          count: loanPending?.pendingDisbursement.length ?? 0 },
     { key: 'repayments' as Tab,   label: 'Loan Repayments',      icon: <FileText size={14} />,    count: repaymentsPending.length },
     { key: 'safekeeping' as Tab,  label: 'Safekeeping (Leave/Collect)', icon: <PiggyBank size={14} />, count: skPending.length },
+    { key: 'accountant' as Tab,   label: 'Accountant Book (In/Out)', icon: <DollarSign size={14} />, count: acctPending.length },
     { key: 'reversals' as Tab,    label: 'Reversal Requests',   icon: <RotateCcw size={14} />,    count: reversalsCount },
   ];
 
-  const total = cashPending.length + (loanPending?.pendingApproval.length ?? 0) + (loanPending?.pendingDisbursement.length ?? 0) + repaymentsPending.length + skPending.length + reversalsCount;
+  const total = cashPending.length + (loanPending?.pendingApproval.length ?? 0) + (loanPending?.pendingDisbursement.length ?? 0) + repaymentsPending.length + skPending.length + acctPending.length + reversalsCount;
 
   return (
     <div>
@@ -100,6 +107,7 @@ export default function PendingApprovalsPage() {
       {tab === 'loan-disburse'&& <LoanDisbursementsTab  data={loanPending?.pendingDisbursement ?? []} isLoading={loadLoan} qc={qc} />}
       {tab === 'repayments'   && <LoanRepaymentsTab data={repaymentsPending} isLoading={loadRepayments} qc={qc} />}
       {tab === 'safekeeping'  && <SafekeepingWithdrawalsTab data={skPending}                        isLoading={loadSk}    qc={qc} />}
+      {tab === 'accountant'   && <AccountantMovementsTab data={acctPending}                         isLoading={loadAcct}  qc={qc} />}
       {tab === 'reversals'    && <ReversalRequestsTab cashData={cashReversals} acctData={acctReversals} isLoading={loadCashRev || loadAcctRev} qc={qc} />}
     </div>
   );
@@ -299,6 +307,70 @@ function CashDisbursementsTab({ data, isLoading, qc }: { data: PendingCashDisbur
       )}
       {rejectTarget && <RejectModal title="Reject Cash Disbursement"
         onReject={async (reason) => { await api.post(`/cash/reject/${rejectTarget}`, reason, { headers: { 'Content-Type': 'application/json' } }); qc.invalidateQueries({ queryKey: ['cashPending'] }); qc.invalidateQueries({ queryKey: ['pendingCount'] }); }}
+        onClose={() => setRejectTarget(null)} />}
+    </div>
+  );
+}
+
+// ─── Accountant Book Movements Tab (Cash In / Cash Out) ───────────────────────
+function AccountantMovementsTab({ data, isLoading, qc }: { data: PendingAccountantMovement[]; isLoading: boolean; qc: any }) {
+  const [rejectTarget, setRejectTarget] = useState<number | null>(null);
+
+  const approve = useMutation({
+    mutationFn: (id: number) => api.post(`/accountant/approve/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['accountantPending'] });
+      qc.invalidateQueries({ queryKey: ['accountantBalance'] });
+      qc.invalidateQueries({ queryKey: ['accountantDaily'] });
+      qc.invalidateQueries({ queryKey: ['pendingCount'] });
+    },
+  });
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {isLoading ? <LoadingSpinner /> : data.length === 0 ? (
+        <EmptyState icon={CheckCircle2} title="No pending accountant book entries" sub="All cash-in / cash-out requests have been reviewed" />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>{['Date','Type','Amount','Source / Purpose','Reference','Requested By','Actions'].map(h => (
+                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.map(m => (
+                <tr key={m.id} className="hover:bg-amber-50 transition">
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{new Date(m.date).toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${m.type === 'Addition' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {m.type === 'Addition' ? 'Cash In' : 'Cash Out'}
+                    </span>
+                  </td>
+                  <td className={`px-4 py-3 font-bold ${m.type === 'Addition' ? 'text-green-600' : 'text-red-600'}`}>{usd(m.amount)}</td>
+                  <td className="px-4 py-3 text-slate-700 max-w-xs truncate">{m.sourceOrPurpose}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{m.reference}</td>
+                  <td className="px-4 py-3 text-slate-600 text-xs">{m.requestedBy}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button onClick={() => approve.mutate(m.id)} disabled={approve.isPending}
+                        className="flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition disabled:opacity-50">
+                        {approve.isPending ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Approve
+                      </button>
+                      <button onClick={() => setRejectTarget(m.id)}
+                        className="flex items-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
+                        <XCircle size={12} /> Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rejectTarget && <RejectModal title="Reject Accountant Book Entry"
+        onReject={async (reason) => { await api.post(`/accountant/reject/${rejectTarget}`, reason, { headers: { 'Content-Type': 'application/json' } }); qc.invalidateQueries({ queryKey: ['accountantPending'] }); qc.invalidateQueries({ queryKey: ['pendingCount'] }); }}
         onClose={() => setRejectTarget(null)} />}
     </div>
   );

@@ -224,6 +224,8 @@ function DailyReportTab() {
                           <td className="px-4 py-3 font-semibold text-green-600">{!isDebit ? usd(t.amount) : ''}</td>
                           <td className="px-4 py-3 text-slate-600 max-w-xs truncate">
                             {t.sourceOrPurpose}
+                            {t.approvalStatus === 'Pending' && <span className="ml-2 text-xs text-amber-600 font-medium">(awaiting approval)</span>}
+                            {t.approvalStatus === 'Rejected' && <span className="ml-2 text-xs text-red-500 font-medium">(rejected)</span>}
                             {t.isReversed && <span className="ml-2 text-xs text-red-500 font-medium">(reversed)</span>}
                             {t.isReversal && <span className="ml-2 text-xs text-blue-500 font-medium">(reversal)</span>}
                             {t.reversalStatus === 'Pending' && <span className="ml-2 text-xs text-amber-600 font-medium">(reversal pending)</span>}

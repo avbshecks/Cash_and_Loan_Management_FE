@@ -294,9 +294,20 @@ export interface AccountantLedgerEntry {
   sourceOrPurpose: string;
   reference: string;
   createdBy: string;
+  approvalStatus?: string;
   isReversed: boolean;
   isReversal: boolean;
   reversalStatus?: string | null;
+}
+
+export interface PendingAccountantMovement {
+  id: number;
+  date: string;
+  amount: number;
+  type: string;
+  sourceOrPurpose: string;
+  reference: string;
+  requestedBy: string;
 }
 
 export interface AccountantDailyReport {

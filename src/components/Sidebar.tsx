@@ -40,15 +40,16 @@ export default function Sidebar() {
   const { data: pendingData } = useQuery({
     queryKey: ['pendingCount'],
     queryFn: async () => {
-      const [cash, loans, sk, cashRev, acctRev, repayments] = await Promise.all([
+      const [cash, loans, sk, cashRev, acctRev, repayments, acctPending] = await Promise.all([
         api.get('/cash/pending').then(r => r.data as any[]).catch(() => []),
         api.get('/loan/pending').then(r => r.data).catch(() => ({ pendingApproval: [], pendingDisbursement: [] })),
         api.get('/safekeeping/pending').then(r => r.data as any[]).catch(() => []),
         api.get('/cash/pending-reversals').then(r => r.data as any[]).catch(() => []),
         api.get('/accountant/pending-reversals').then(r => r.data as any[]).catch(() => []),
         api.get('/loan/pending-repayments').then(r => r.data as any[]).catch(() => []),
+        api.get('/accountant/pending').then(r => r.data as any[]).catch(() => []),
       ]);
-      return cash.length + (loans.pendingApproval?.length ?? 0) + (loans.pendingDisbursement?.length ?? 0) + sk.length + cashRev.length + acctRev.length + repayments.length;
+      return cash.length + (loans.pendingApproval?.length ?? 0) + (loans.pendingDisbursement?.length ?? 0) + sk.length + cashRev.length + acctRev.length + repayments.length + acctPending.length;
     },
     refetchInterval: 60_000,
     retry: false,
