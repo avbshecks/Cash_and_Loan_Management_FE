@@ -186,7 +186,7 @@ function RepaymentModal({ loanId, remaining, borrowerName, onClose, qc }:
   const mut = useMutation({
     mutationFn: (d: any) => api.post('/loan/repayment', { loanId, amount: Number(d.amount) }),
     onSuccess: (res) => {
-      setOk(`Repayment ${res.data.reference} recorded. Remaining: ${usd(res.data.remainingBalance)}`);
+      setOk(res.data.message ?? `Repayment submitted for approval. It will be applied once a Manager approves it.`);
       qc.invalidateQueries({ queryKey: ['loan', loanId] });
       qc.invalidateQueries({ queryKey: ['loanStatement', loanId] });
       qc.invalidateQueries({ queryKey: ['loans'] });

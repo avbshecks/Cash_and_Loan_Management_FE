@@ -180,7 +180,7 @@ function MovementModal({ mode, accountId, balance, depositor, onClose, qc }:
     mutationFn: (d: any) => api.post(`/safekeeping/accounts/${accountId}/${isDeposit ? 'deposit' : 'withdraw'}`, { amount: Number(d.amount), notes: d.notes }),
     onSuccess: (res) => {
       setOk(isDeposit
-        ? `Deposit ${res.data.reference} recorded. Balance: ${usd(res.data.balance)}`
+        ? (res.data.message ?? `Deposit submitted for approval. Balance will update once a Manager approves it.`)
         : `Collection ${res.data.reference} submitted for approval. The depositor can be paid once a checker approves it.`);
       qc.invalidateQueries({ queryKey: ['safekeepingAccount', accountId] });
       qc.invalidateQueries({ queryKey: ['safekeeping'] });

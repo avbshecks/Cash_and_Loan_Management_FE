@@ -130,7 +130,7 @@ function AddCashForm({ qc }: { qc: any }) {
 
   const mut = useMutation({
     mutationFn: (d: AddCashRequest) => api.post('/cash/add', d),
-    onSuccess: (res) => { setOk(`Cash added (Ref: ${res.data.reference}). New balance: ${usd(res.data.newBalance)}`); reset(); qc.invalidateQueries({ queryKey: ['balance'] }); qc.invalidateQueries({ queryKey: ['cashLedger'] }); },
+    onSuccess: (res) => { setOk(res.data.message ?? `Cash addition submitted for approval (Ref: ${res.data.reference}). It will reflect once a Manager approves it.`); reset(); qc.invalidateQueries({ queryKey: ['balance'] }); qc.invalidateQueries({ queryKey: ['cashLedger'] }); },
     onError: (e: any) => setErr(e.response?.data?.message ?? 'Failed'),
   });
 

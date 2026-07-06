@@ -191,6 +191,18 @@ export interface PendingCashDisbursement {
   reference: string;
   requestedBy: string;
   approvalStatus: string;
+  type?: string;   // "Addition" | "Disbursement"
+}
+
+export interface PendingLoanRepayment {
+  id: number;
+  amount: number;
+  reference: string;
+  repaymentDate: string;
+  loanId: number;
+  loanReference: string;
+  borrowerName: string;
+  requestedBy: string;
 }
 
 export interface PendingLoan {
@@ -251,6 +263,7 @@ export interface PendingSafekeepingWithdrawal {
   accountId: number;
   depositorName: string;
   requestedBy: string;
+  type?: string;   // "Deposit" | "Withdrawal"
 }
 
 export interface SafekeepingAccountDetail {

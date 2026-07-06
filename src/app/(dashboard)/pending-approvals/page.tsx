@@ -8,14 +8,14 @@ import {
   XCircle, Loader2, X, AlertTriangle, Zap, PiggyBank, RotateCcw
 } from 'lucide-react';
 import api from '@/lib/api';
-import { PendingCashDisbursement, PendingLoan, PendingSafekeepingWithdrawal, PendingReversal } from '@/lib/types';
+import { PendingCashDisbursement, PendingLoan, PendingLoanRepayment, PendingSafekeepingWithdrawal, PendingReversal } from '@/lib/types';
 import Header from '@/components/Header';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import EmptyState from '@/components/EmptyState';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
-type Tab = 'cash' | 'loan-approval' | 'loan-disburse' | 'safekeeping' | 'reversals';
+type Tab = 'cash' | 'loan-approval' | 'loan-disburse' | 'repayments' | 'safekeeping' | 'reversals';
 
 export default function PendingApprovalsPage() {
   const qc = useQueryClient();
@@ -39,6 +39,12 @@ export default function PendingApprovalsPage() {
     refetchInterval: 30_000,
   });
 
+  const { data: repaymentsPending = [], isLoading: loadRepayments } = useQuery<PendingLoanRepayment[]>({
+    queryKey: ['loanRepaymentsPending'],
+    queryFn: () => api.get('/loan/pending-repayments').then(r => r.data),
+    refetchInterval: 30_000,
+  });
+
   const { data: cashReversals = [], isLoading: loadCashRev } = useQuery<PendingReversal[]>({
     queryKey: ['cashReversalsPending'],
     queryFn: () => api.get('/cash/pending-reversals').then(r => r.data),
@@ -54,14 +60,15 @@ export default function PendingApprovalsPage() {
   const reversalsCount = cashReversals.length + acctReversals.length;
 
   const tabs = [
-    { key: 'cash' as Tab,         label: 'Cash Disbursements',  icon: <DollarSign size={14} />,  count: cashPending.length },
+    { key: 'cash' as Tab,         label: 'Cash Additions & Disbursements',  icon: <DollarSign size={14} />,  count: cashPending.length },
     { key: 'loan-approval' as Tab, label: 'Loan Approvals',      icon: <FileText size={14} />,    count: loanPending?.pendingApproval.length ?? 0 },
     { key: 'loan-disburse' as Tab, label: 'Loan Disbursements',  icon: <Zap size={14} />,          count: loanPending?.pendingDisbursement.length ?? 0 },
-    { key: 'safekeeping' as Tab,  label: 'Safekeeping Withdrawals', icon: <PiggyBank size={14} />, count: skPending.length },
+    { key: 'repayments' as Tab,   label: 'Loan Repayments',      icon: <FileText size={14} />,    count: repaymentsPending.length },
+    { key: 'safekeeping' as Tab,  label: 'Safekeeping (Leave/Collect)', icon: <PiggyBank size={14} />, count: skPending.length },
     { key: 'reversals' as Tab,    label: 'Reversal Requests',   icon: <RotateCcw size={14} />,    count: reversalsCount },
   ];
 
-  const total = cashPending.length + (loanPending?.pendingApproval.length ?? 0) + (loanPending?.pendingDisbursement.length ?? 0) + skPending.length + reversalsCount;
+  const total = cashPending.length + (loanPending?.pendingApproval.length ?? 0) + (loanPending?.pendingDisbursement.length ?? 0) + repaymentsPending.length + skPending.length + reversalsCount;
 
   return (
     <div>
@@ -91,6 +98,7 @@ export default function PendingApprovalsPage() {
       {tab === 'cash'         && <CashDisbursementsTab data={cashPending}                           isLoading={loadCash}  qc={qc} />}
       {tab === 'loan-approval'&& <LoanApprovalsTab      data={loanPending?.pendingApproval ?? []}   isLoading={loadLoan}  qc={qc} />}
       {tab === 'loan-disburse'&& <LoanDisbursementsTab  data={loanPending?.pendingDisbursement ?? []} isLoading={loadLoan} qc={qc} />}
+      {tab === 'repayments'   && <LoanRepaymentsTab data={repaymentsPending} isLoading={loadRepayments} qc={qc} />}
       {tab === 'safekeeping'  && <SafekeepingWithdrawalsTab data={skPending}                        isLoading={loadSk}    qc={qc} />}
       {tab === 'reversals'    && <ReversalRequestsTab cashData={cashReversals} acctData={acctReversals} isLoading={loadCashRev || loadAcctRev} qc={qc} />}
     </div>
@@ -195,7 +203,7 @@ function SafekeepingWithdrawalsTab({ data, isLoading, qc }: { data: PendingSafek
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{['Date','Depositor','Amount','Reference','Requested By','Actions'].map(h => (
+              <tr>{['Date','Type','Depositor','Amount','Reference','Requested By','Actions'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
               ))}</tr>
             </thead>
@@ -203,8 +211,13 @@ function SafekeepingWithdrawalsTab({ data, isLoading, qc }: { data: PendingSafek
               {data.map(w => (
                 <tr key={w.id} className="hover:bg-amber-50 transition">
                   <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{new Date(w.date).toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${w.type === 'Deposit' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {w.type === 'Deposit' ? 'Leave Money' : 'Collect Money'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 font-medium text-slate-800">{w.depositorName}</td>
-                  <td className="px-4 py-3 font-bold text-red-600">{usd(w.amount)}</td>
+                  <td className={`px-4 py-3 font-bold ${w.type === 'Deposit' ? 'text-green-600' : 'text-red-600'}`}>{usd(w.amount)}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{w.reference}</td>
                   <td className="px-4 py-3 text-slate-600 text-xs">{w.requestedBy}</td>
                   <td className="px-4 py-3">
@@ -249,7 +262,7 @@ function CashDisbursementsTab({ data, isLoading, qc }: { data: PendingCashDisbur
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{['Date & Time','Amount','Recipient / Purpose','Reference','Requested By','Actions'].map(h => (
+              <tr>{['Date & Time','Type','Amount','Recipient / Purpose','Reference','Requested By','Actions'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
               ))}</tr>
             </thead>
@@ -257,7 +270,12 @@ function CashDisbursementsTab({ data, isLoading, qc }: { data: PendingCashDisbur
               {data.map(tx => (
                 <tr key={tx.id} className="hover:bg-amber-50 transition">
                   <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{new Date(tx.date).toLocaleString()}</td>
-                  <td className="px-4 py-3 font-bold text-red-600">{usd(tx.amount)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${tx.type === 'Addition' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {tx.type === 'Addition' ? 'Addition' : 'Disbursement'}
+                    </span>
+                  </td>
+                  <td className={`px-4 py-3 font-bold ${tx.type === 'Addition' ? 'text-green-600' : 'text-red-600'}`}>{usd(tx.amount)}</td>
                   <td className="px-4 py-3 text-slate-700 max-w-xs">{tx.sourceOrPurpose}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{tx.reference}</td>
                   <td className="px-4 py-3 text-slate-600">{tx.requestedBy}</td>
@@ -281,6 +299,66 @@ function CashDisbursementsTab({ data, isLoading, qc }: { data: PendingCashDisbur
       )}
       {rejectTarget && <RejectModal title="Reject Cash Disbursement"
         onReject={async (reason) => { await api.post(`/cash/reject/${rejectTarget}`, reason, { headers: { 'Content-Type': 'application/json' } }); qc.invalidateQueries({ queryKey: ['cashPending'] }); qc.invalidateQueries({ queryKey: ['pendingCount'] }); }}
+        onClose={() => setRejectTarget(null)} />}
+    </div>
+  );
+}
+
+// ─── Loan Repayments Tab ───────────────────────────────────────────────────────
+function LoanRepaymentsTab({ data, isLoading, qc }: { data: PendingLoanRepayment[]; isLoading: boolean; qc: any }) {
+  const [rejectTarget, setRejectTarget] = useState<number | null>(null);
+
+  const approve = useMutation({
+    mutationFn: (id: number) => api.post(`/loan/repayment/${id}/approve`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loanRepaymentsPending'] });
+      qc.invalidateQueries({ queryKey: ['loans'] });
+      qc.invalidateQueries({ queryKey: ['balance'] });
+      qc.invalidateQueries({ queryKey: ['pendingCount'] });
+    },
+  });
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {isLoading ? <LoadingSpinner /> : data.length === 0 ? (
+        <EmptyState icon={CheckCircle2} title="No pending loan repayments" sub="All repayments have been reviewed" />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>{['Date','Loan Reference','Borrower','Amount','Reference','Requested By','Actions'].map(h => (
+                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.map(r => (
+                <tr key={r.id} className="hover:bg-amber-50 transition">
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{new Date(r.repaymentDate).toLocaleString()}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.loanReference}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800">{r.borrowerName}</td>
+                  <td className="px-4 py-3 font-bold text-green-600">{usd(r.amount)}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.reference}</td>
+                  <td className="px-4 py-3 text-slate-600 text-xs">{r.requestedBy}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button onClick={() => approve.mutate(r.id)} disabled={approve.isPending}
+                        className="flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition disabled:opacity-50">
+                        {approve.isPending ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Approve
+                      </button>
+                      <button onClick={() => setRejectTarget(r.id)}
+                        className="flex items-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
+                        <XCircle size={12} /> Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rejectTarget && <RejectModal title="Reject Loan Repayment"
+        onReject={async (reason) => { await api.post(`/loan/repayment/${rejectTarget}/reject`, reason, { headers: { 'Content-Type': 'application/json' } }); qc.invalidateQueries({ queryKey: ['loanRepaymentsPending'] }); qc.invalidateQueries({ queryKey: ['pendingCount'] }); }}
         onClose={() => setRejectTarget(null)} />}
     </div>
   );

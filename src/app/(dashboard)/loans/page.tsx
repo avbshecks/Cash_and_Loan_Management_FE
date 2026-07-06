@@ -247,7 +247,7 @@ function QuickRepaymentModal({ loans, onClose, qc }: { loans: Loan[]; onClose: (
   const mut = useMutation({
     mutationFn: (amount: number) => api.post('/loan/repayment', { loanId: selected!.id, amount }),
     onSuccess: (res) => {
-      setOk(`Repayment ${res.data.reference} recorded. Remaining: ${fmt(res.data.remainingBalance)}`);
+      setOk(res.data.message ?? `Repayment submitted for approval. It will be applied once a Manager approves it.`);
       qc.invalidateQueries({ queryKey: ['loans'] });
       qc.invalidateQueries({ queryKey: ['balance'] });
     },
@@ -440,7 +440,7 @@ function RepaymentModal({ loan, onClose, qc }: { loan: Loan; onClose: () => void
 
   const mut = useMutation({
     mutationFn: (d: CaptureRepaymentRequest) => api.post('/loan/repayment', d),
-    onSuccess: (res) => { setOk(`Repayment recorded (Ref: ${res.data.reference}). Remaining: $${res.data.remainingBalance?.toLocaleString('en-US',{minimumFractionDigits:2})}`); qc.invalidateQueries({ queryKey: ['loans'] }); qc.invalidateQueries({ queryKey: ['balance'] }); },
+    onSuccess: (res) => { setOk(res.data.message ?? `Repayment submitted for approval. It will be applied once a Manager approves it.`); qc.invalidateQueries({ queryKey: ['loans'] }); qc.invalidateQueries({ queryKey: ['balance'] }); },
     onError: (e: any) => setErr(e.response?.data?.message ?? 'Failed'),
   });
 
