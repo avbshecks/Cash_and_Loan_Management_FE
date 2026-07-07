@@ -141,7 +141,7 @@ export default function LoanDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-100">
-                  <tr>{['Date','Amount','Balance After','Reference','By'].map(h => (
+                  <tr>{['Date','Status','Amount','Balance After','Reference','By'].map(h => (
                     <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                   ))}</tr>
                 </thead>
@@ -149,8 +149,13 @@ export default function LoanDetailPage() {
                   {statement.schedule.map((r: any) => (
                     <tr key={r.id} className="hover:bg-slate-50 transition">
                       <td className="px-4 py-3 text-xs text-slate-500">{new Date(r.repaymentDate).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">
+                        {r.status === 'Pending' && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Pending</span>}
+                        {r.status === 'Rejected' && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">Rejected</span>}
+                        {r.status === 'Approved' && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">Approved</span>}
+                      </td>
                       <td className="px-4 py-3 font-semibold text-green-600">+{usd(r.amount)}</td>
-                      <td className="px-4 py-3 text-slate-600">{usd(r.balanceAfter)}</td>
+                      <td className="px-4 py-3 text-slate-600">{r.balanceAfter != null ? usd(r.balanceAfter) : '—'}</td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.reference}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{r.capturedBy}</td>
                     </tr>
