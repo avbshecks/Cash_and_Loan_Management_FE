@@ -147,6 +147,60 @@ export interface Loan {
   repayments: { id: number; amount: number; repaymentDate: string; reference: string }[];
 }
 
+export interface LoanRepaymentEntry {
+  id: number;
+  amount: number;
+  repaymentDate: string;
+  reference: string;
+  status: string; // "Pending" | "Approved" | "Rejected"
+  capturedBy: string;
+}
+
+export interface LoanDetail {
+  id: number;
+  referenceNumber: string;
+  amount: number;
+  repaymentTerms: string;
+  dueDate: string;
+  status: LoanStatus;
+  createdAt: string;
+  approvedAt?: string | null;
+  disbursedAt?: string | null;
+  totalRepaid: number;
+  remainingBalance: number;
+  daysOverdue: number;
+  repaymentProgress: number;
+  borrower: { id: number; fullName: string; nationalId: string; phone: string };
+  createdBy: string;
+  approvedBy?: string | null;
+  repayments: LoanRepaymentEntry[];
+}
+
+export interface LoanStatementEntry {
+  id: number;
+  repaymentDate: string;
+  amount: number;
+  reference: string;
+  status: string; // "Pending" | "Approved" | "Rejected"
+  balanceAfter: number | null; // null while still Pending/Rejected — hasn't posted yet
+  capturedBy: string;
+}
+
+export interface LoanStatement {
+  id: number;
+  referenceNumber: string;
+  amount: number;
+  repaymentTerms: string;
+  dueDate: string;
+  status: LoanStatus;
+  disbursedAt?: string | null;
+  borrower: { fullName: string; nationalId: string; phone: string };
+  totalRepaid: number;
+  remainingBalance: number;
+  repaymentCount: number;
+  schedule: LoanStatementEntry[];
+}
+
 export interface CreateLoanRequest {
   borrowerId: number;
   amount: number;

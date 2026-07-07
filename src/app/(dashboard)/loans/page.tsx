@@ -179,7 +179,7 @@ function DayLoanModal({ onClose, qc }: { onClose: () => void; qc: any }) {
       ) : (
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-xs text-blue-800">
-            Same-day loan — disbursed immediately and due by this evening. Repay via the borrower's loan when they return.
+            Same-day loan, due by this evening. Like any loan, a Manager must approve and disburse it before the borrower gets the cash.
           </div>
           {err && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{err}</div>}
 
@@ -218,7 +218,7 @@ function DayLoanModal({ onClose, qc }: { onClose: () => void; qc: any }) {
             <MField label="Amount (USD)" type="number" step="0.01" {...register('amount', { required: true })} />
             <button type="submit" disabled={mut.isPending || !selected}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg text-sm transition flex items-center justify-center gap-2 disabled:opacity-60">
-              {mut.isPending ? <><Loader2 size={15} className="animate-spin" /> Issuing…</> : <><Sun size={15} /> Issue Day Loan</>}
+              {mut.isPending ? <><Loader2 size={15} className="animate-spin" /> Submitting…</> : <><Sun size={15} /> Request Day Loan</>}
             </button>
           </form>
         </div>

@@ -15,6 +15,7 @@ import Badge, { statusVariant } from '@/components/Badge';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { getStoredUser } from '@/lib/auth';
 import { canEntry } from '@/lib/permissions';
+import { LoanDetail, LoanStatement } from '@/lib/types';
 
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
@@ -25,12 +26,12 @@ export default function LoanDetailPage() {
   const id = Number(params.id);
   const [showRepay, setShowRepay] = useState(false);
 
-  const { data: loan, isLoading } = useQuery({
+  const { data: loan, isLoading } = useQuery<LoanDetail>({
     queryKey: ['loan', id],
     queryFn: () => api.get(`/loan/${id}`).then(r => r.data),
   });
 
-  const { data: statement } = useQuery({
+  const { data: statement } = useQuery<LoanStatement>({
     queryKey: ['loanStatement', id],
     queryFn: () => api.get(`/loan/${id}/statement`).then(r => r.data),
   });
@@ -146,7 +147,7 @@ export default function LoanDetailPage() {
                   ))}</tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {statement.schedule.map((r: any) => (
+                  {statement.schedule.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50 transition">
                       <td className="px-4 py-3 text-xs text-slate-500">{new Date(r.repaymentDate).toLocaleDateString()}</td>
                       <td className="px-4 py-3">
